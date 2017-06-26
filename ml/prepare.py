@@ -3,15 +3,11 @@
 import click
 import os
 import math
-from consts import Classifications, axis, Segment, RawLine, Sample
+from consts import Classifications, axis, Segment, RawLine
 
 
 def read_segment(raw_data, segment):
-    return [enrich(l, segment) for l in raw_data if l.ts >= segment.start and l.ts <= segment.end]
-
-
-def enrich(l, segment):
-    return Sample(l.ax, l.ay, l.az, l.gx, l.gy, l.gz, segment.classification)
+    return [l for l in raw_data if l.ts >= segment.start and l.ts <= segment.end]
 
 
 def parse_line(ts, *axis):
@@ -23,8 +19,11 @@ def read_raw(f):
 
 
 def chunk(data, chunk_size):
+    prev_data = [RawLine(0, 0, 0, 0, 0, 0, 0) for _ in range(chunk_size)]
+
     for i in range(0, len(data), chunk_size):
-        yield data[i:i+chunk_size]
+        yield prev_data[math.floor(chunk_size/2):] + data[i:i+chunk_size]
+        prev_data = data[i:i+chunk_size]
     
 
 @click.command()
@@ -45,23 +44,26 @@ def main(input_file, output_dir, chunk_size):
 
     raw_data = read_raw(input_file)
 
+    try:
+        for t in 'train', 'test':
+            for axi in axis:
+                os.unlink(os.path.join(output_dir, t, axi))
 
-    for t in 'train', 'test':
-        for axi in axis:
-            os.unlink(os.path.join(output_dir, t, axi))
-
-        os.unlink(os.path.join(output_dir, t, 'classification'))
+            os.unlink(os.path.join(output_dir, t, 'classification'))
+    except FileNotFoundError:
+        pass
 
     for s in segments:
         segment = read_segment(raw_data, s)
+
         res = {
-            'train': segment[0:math.floor(len(segment) * 0.7)],
-            'test': segment[math.floor(len(segment) * 0.7):],
+            'train': segment[0:math.floor(len(segment) * 0.5)],
+            'test': segment[math.floor(len(segment) * 0.5):],
         }
 
         for t, v in res.items():
             for c in chunk(v, chunk_size):
-                if len(c) < chunk_size:
+                if len(c) != (chunk_size + math.floor(chunk_size/2)):
                     continue
                     
                 for axi in axis:

@@ -8,6 +8,9 @@ from consts import axis, labels
 import os
 import sys
 
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 input_dir = sys.argv[1]
 
 def load_X(X_signals_paths):
@@ -94,11 +97,8 @@ def one_hot(y_):
     # Function to encode output labels from number indexes 
     # e.g.: [[5], [0], [3]] --> [[0, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
     
-    print(y_.shape)
-    print(len(y_))
     y_ = y_.reshape(len(y_))
     n_values = int(np.max(y_)) + 1
-    print(n_values)
     return np.eye(n_values)[np.array(y_, dtype=np.int32)]  # Returns FLOATS
 
 
