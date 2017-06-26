@@ -30,16 +30,22 @@ def chunk(data, chunk_size):
 @click.option('-i', '--input-file', required=True)
 @click.option('-o', '--output-dir', required=True)
 @click.option('-c', '--chunk_size', default=30)
-def main(input_file, output_dir, chunk_size):
+@click.option('-r', '--ratio', default=0.6)
+def main(input_file, output_dir, chunk_size, ratio):
     segments = [
+        Segment(1500983202, 1500983626, Classifications.DIRT_ROAD),
+        Segment(1500983202, 1500983626, Classifications.DIRT_ROAD),
+
+        Segment(1500981255, 1500981788, Classifications.GOOD_ROAD),
+        Segment(1500981255, 1500981788, Classifications.GOOD_ROAD),
+
         Segment(1500980803, 1500980838, Classifications.STANDING),
-        Segment(1500984890, 1500984919, Classifications.STANDING),
-        Segment(1500980838, 1500981255, Classifications.BAD_ROAD),
-        Segment(1500981255, 1500981700, Classifications.GOOD_ROAD),
-        Segment(1500981955, 1500982120, Classifications.BAD_ROAD),
-        Segment(1500982944, 1500983626, Classifications.DIRT_ROAD),
-        Segment(1500983688, 1500983851, Classifications.GOOD_ROAD),
-        Segment(1500985370, 1500986266, Classifications.BAD_ROAD),
+        Segment(1500984890, 1500984900, Classifications.STANDING),
+        Segment(1500980803, 1500980838, Classifications.STANDING),
+        Segment(1500984890, 1500984900, Classifications.STANDING),
+        
+        Segment(1500980836, 1500981250, Classifications.BAD_ROAD),
+        Segment(1500980836, 1500981250, Classifications.BAD_ROAD),
     ]
 
     raw_data = read_raw(input_file)
@@ -57,8 +63,8 @@ def main(input_file, output_dir, chunk_size):
         segment = read_segment(raw_data, s)
 
         res = {
-            'train': segment[0:math.floor(len(segment) * 0.5)],
-            'test': segment[math.floor(len(segment) * 0.5):],
+            'train': segment[0:math.floor(len(segment) * ratio)],
+            'test': segment[math.floor(len(segment) * ratio):],
         }
 
         for t, v in res.items():
