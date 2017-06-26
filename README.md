@@ -16,6 +16,21 @@ source ./pyenv/bin/activate
 pip install -r requirements.txt
 ```
 
+### preparing data
+```bash
+cd ml
+. ./pyenv/bin/activate
+mkdir -p processed/{test/train}
+python prepare.py -i ../raw_data/17_7_25.CSV -o processed
+```
+
+### building a testing a model
+```bash
+cd ml
+. ./pyenv/bin/activate
+python main.py processed
+```
+
 ### Prior arts
 
 #### DTW+kNN approach:
