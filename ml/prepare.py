@@ -3,6 +3,7 @@
 import click
 import os
 import math
+from scipy.interpolate import interp1d
 from consts import Classifications, axis, Segment, RawLine
 
 
@@ -11,7 +12,8 @@ def read_segment(raw_data, segment):
 
 
 def parse_line(ts, *axis):
-    return RawLine(*[int(ts)] + [float(i) for i in axis])
+    m = interp1d([-35000,35000],[-1,1])
+    return RawLine(*[int(ts)] + [m(float(i)) for i in axis])
 
 
 def read_raw(f):
@@ -19,12 +21,28 @@ def read_raw(f):
 
 
 def chunk(data, chunk_size):
-    prev_data = [RawLine(0, 0, 0, 0, 0, 0, 0) for _ in range(chunk_size)]
+    if not data:
+        return []
 
-    for i in range(0, len(data), chunk_size):
-        yield prev_data[math.floor(chunk_size/2):] + data[i:i+chunk_size]
-        prev_data = data[i:i+chunk_size]
+    half_chunk = math.floor(chunk_size/2)
+    prev_data = data[0:chunk_size]
+
+    yield prev_data
+
+    for i in range(chunk_size, len(data), half_chunk):
+        chunk = prev_data[half_chunk:] + data[i:i+half_chunk]
+        yield chunk
+        prev_data = chunk
     
+
+def segment_to_train_and_test(data, ratio):
+    r = math.ceil(len(data) * ratio)
+
+    return {
+        'train': data[0:r],
+        'test': data[r:],
+    }
+
 
 @click.command()
 @click.option('-i', '--input-file', required=True)
@@ -39,7 +57,7 @@ def main(input_file, output_dir, chunk_size, ratio):
         Segment(1500981255, 1500981788, Classifications.GOOD_ROAD),
         Segment(1500981255, 1500981788, Classifications.GOOD_ROAD),
 
-        Segment(1500980803, 1500980838, Classifications.STANDING),
+        Segment(1500980804, 1500980838, Classifications.STANDING),
         Segment(1500984890, 1500984900, Classifications.STANDING),
         Segment(1500980803, 1500980838, Classifications.STANDING),
         Segment(1500984890, 1500984900, Classifications.STANDING),
@@ -61,15 +79,10 @@ def main(input_file, output_dir, chunk_size, ratio):
 
     for s in segments:
         segment = read_segment(raw_data, s)
-
-        res = {
-            'train': segment[0:math.floor(len(segment) * ratio)],
-            'test': segment[math.floor(len(segment) * ratio):],
-        }
-
-        for t, v in res.items():
+        train_test = segment_to_train_and_test(segment, ratio)
+        for t, v in train_test.items():
             for c in chunk(v, chunk_size):
-                if len(c) != (chunk_size + math.floor(chunk_size/2)):
+                if len(c) != chunk_size:
                     continue
                     
                 for axi in axis:
