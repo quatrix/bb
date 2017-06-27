@@ -95,39 +95,48 @@ void setupAccelerometer () {
   gotError = false;
 }
 
+#define FREQ 50
+
 void loop () {
-  delay(100);
+  delay(10);
 
   if (gotError) {
     return;
   }
 
   DateTime now = RTC.now();
-  CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
-
   String filename = String(now.year()).substring(2) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
+  String unix = String(now.unixtime());
+
   File outputFile = SD.open(filename, FILE_WRITE);
 
   if (!outputFile) {
-    Serial.println("error opening file for writing");
     lcdWrite(1, "Error opening file.");
     gotError = true;
     return;
   }
 
-  String output = String(now.unixtime()) + "," + String(ax) + "," + String(ay) + "," + String(az) + "," + String(gz) + "," + String(gy) + "," + String(gx);
-  Serial.println(output);
-  int wrote = outputFile.println(output);
+  int d = 1000/FREQ;
+  String output;
 
-  if (!wrote) {
-    lcdWrite(1, "Error writing");
-    lcdWrite(2, "to file");
-    gotError = true;
-    return;
-  } 
+  for (int i = 0; i <= FREQ; i++) {
+      delay(d);
 
-  outputFile.close();
+      CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
 
-  lcdWrite(1, String(now.unixtime()).substring(5) + " x:" + String(gx));
+      output = unix + "," + String(ax) + "," + String(ay) + "," + String(az) + "," + String(gz) + "," + String(gy) + "," + String(gx);
+      int wrote = outputFile.println(output);
+
+      if (!wrote) {
+        lcdWrite(1, "Error writing");
+        lcdWrite(2, "to file");
+        gotError = true;
+        return;
+      } 
+
+  }
+
+  lcdWrite(1, unix.substring(5) + " x:" + String(gx));
   lcdWrite(2, "y:" + String(gy) + " z:" + String(gz));
+  outputFile.close();
 }
