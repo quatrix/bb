@@ -1,3 +1,4 @@
+click==6.7
 cycler==0.10.0
 DictObject==0.1.3
 luckydonald-utils==0.53
@@ -6,7 +7,9 @@ ncTelegram==0.9.6
 numpy==1.13.0
 protobuf==3.3.0
 psutil==5.2.2
+py==1.4.34
 pyparsing==2.2.0
+pytest==3.1.2
 pytg==0.4.10
 python-dateutil==2.6.0
 pytz==2017.2

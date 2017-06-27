@@ -31,6 +31,13 @@ cd ml
 python main.py processed
 ```
 
+### running tests
+```bash
+cd ml
+. ./pyenv/bin/activate
+pytest -vv
+```
+
 ### Prior arts
 
 #### DTW+kNN approach:
