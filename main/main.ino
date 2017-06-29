@@ -2,49 +2,73 @@
 #include <SD.h>
 #include <Wire.h>
 #include "DS3231.h"
-#include <CurieTime.h>
 #include <LiquidCrystal_I2C.h>
+#include "CurieIMU.h"
 
 LiquidCrystal_I2C lcd(0x27,20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 RTClib RTC;
 
-#include "CurieIMU.h"
-int ax, ay, az;         // accelerometer values
-int gx, gy, gz;         // gyrometer values
-
-bool gotError = false;
+const unsigned int sampleRateHZ = 100;
 const int chipSelect = 10;
+const int nextButton = 8;
+const int recordButton = 9;
+const char *classList[] = {"hey", "ho", "lets", "go"};
+
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 30;    // the debounce time; increase if the output flickers
+
+int buttonState;             // the current reading from the input pin
+int lastButtonState = LOW;   // the previous reading from the input pin
+bool gotError = false;
+int currentClass = 0;
 
 void setup() {
-  lcd.init();                      // initialize the lcd 
-  lcd.init();                      // initialize the lcd 
+  Serial.begin(9600);
+
+  lcd.init();
   lcd.backlight();
 
-  lcdWrite(1, "Initializing");
-  delay(500);
+  pinMode(nextButton, INPUT);
+  pinMode(recordButton, INPUT);
 
-  // Open serial communications and wait for port to open:
-  Serial.begin(9600);
   Wire.begin();
-  pinMode(53, OUTPUT);//MEGA Uno is pin 10
 
-  lcdWrite(2, "SD card...");
-  delay(100);
+  lcdWrite(1, "Initializing...");
 
   if (!SD.begin(chipSelect)) {
     Serial.println("SD Card failed");
     lcdWrite(2, "SD Card failed");  
+    gotError = true;
     return;
   }
-  lcdWrite(2, "SD Card found");
-  delay(100);
 
-  setupAccelerometer();
-
-  if (!gotError) {
-    lcdWrite(1, "Init done");
-    lcdWrite(2, "                  ");
+  if (!CurieIMU.begin()) {
+    lcdWrite(2, "IMU Failed");
+    gotError = true;
+    return;
   }
+
+  lcdWrite(2, "About to calib");
+  delay(2000);
+ 
+  // The board must be resting in a horizontal position for
+  // the following calibration procedure to work correctly!
+  lcdWrite(2, "Calibrating Gyro...");
+  CurieIMU.autoCalibrateGyroOffset();
+  lcdWrite(2, "Done.");
+ 
+  lcdWrite(2, "Calibrating Accel...");
+  CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
+  CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
+  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
+  lcdWrite(2, "Done.");
+  Serial.println(" Done");
+
+  CurieIMU.setAccelerometerRate(sampleRateHZ);
+  CurieIMU.setAccelerometerRange(2);
+
+  lcdWrite(1, "class: " + String(classList[currentClass]));
+  lcdWrite(2, "hold record...");
 }
 
 void lcdWrite (int line, String msg) {
@@ -54,49 +78,6 @@ void lcdWrite (int line, String msg) {
   lcd.print(msg);
 }
 
-void setupAccelerometer () {
-  Serial.println("Initializing IMU device...");
-  lcdWrite(2, "IMU...");
-  delay(100);
-  CurieIMU.begin();
-
-  // verify connection
-  Serial.println("Testing device connections...");
-  if (CurieIMU.begin()) {
-    lcdWrite(2, "IMU found");
-    delay(100);
-    Serial.println("CurieIMU connection successful");
-  } else {
-    Serial.println("CurieIMU connection failed");
-    lcdWrite(2, "IMU failed");
-    return;
-  }
-
-  Serial.println("About to calibrate. Make sure your board is stable and upright");
-  lcdWrite(2, "About to calib");
-  delay(5000);
-
-  // The board must be resting in a horizontal position for
-  // the following calibration procedure to work correctly!
-  Serial.print("Starting Gyroscope calibration and enabling offset compensation...");
-  lcdWrite(2, "Calibrating Gyro...");
-  CurieIMU.autoCalibrateGyroOffset();
-  lcdWrite(2, "Done.");
-  Serial.println(" Done");
-
-  Serial.print("Starting Acceleration calibration and enabling offset compensation...");
-  lcdWrite(2, "Calibrating Accel...");
-  CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
-  CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
-  CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
-  lcdWrite(2, "Done.");
-  Serial.println(" Done");
-
-  gotError = false;
-}
-
-#define FREQ 50
-
 void loop () {
   delay(10);
 
@@ -104,39 +85,60 @@ void loop () {
     return;
   }
 
-  DateTime now = RTC.now();
-  String filename = String(now.year()).substring(2) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
-  String unix = String(now.unixtime());
+  int reading = digitalRead(nextButton);
 
-  File outputFile = SD.open(filename, FILE_WRITE);
-
-  if (!outputFile) {
-    lcdWrite(1, "Error opening file.");
-    gotError = true;
-    return;
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
   }
 
-  int d = 1000/FREQ;
-  String output;
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != buttonState) {
+      buttonState = reading;
 
-  for (int i = 0; i <= FREQ; i++) {
-      delay(d);
+      if (buttonState == HIGH) {
+        currentClass = (currentClass + 1) % (sizeof(classList) / sizeof(classList[0]));
+        lcdWrite(1, "class: " + String(classList[currentClass]));
+      }
+    }
+  }
 
-      CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
+  lastButtonState = reading;
 
-      output = unix + "," + String(ax) + "," + String(ay) + "," + String(az) + "," + String(gz) + "," + String(gy) + "," + String(gx);
-      int wrote = outputFile.println(output);
+  if (digitalRead(recordButton)) {
+      lcdWrite(2, "recording");
+      DateTime now = RTC.now();
+      String filename = String(now.year()).substring(2) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
+      String unix = String(now.unixtime());
+      String output;
+      int raw[3];
 
-      if (!wrote) {
-        lcdWrite(1, "Error writing");
-        lcdWrite(2, "to file");
+      File outputFile = SD.open(filename, FILE_WRITE);
+
+      if (!outputFile) {
+        lcdWrite(1, "Error opening file.");
         gotError = true;
         return;
-      } 
+      }
 
+      while (digitalRead(recordButton) == HIGH) {
+        if (CurieIMU.dataReady()) {
+          CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
+          output = unix + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(currentClass);
+
+          int wrote = outputFile.println(output);
+
+          if (!wrote) {
+            lcdWrite(1, "Error writing");
+            lcdWrite(2, "to file");
+            gotError = true;
+            return;
+          } 
+        }
+      }
+
+      outputFile.close();
+      lcdWrite(2, "done recording");
+      delay(200);
+      lcdWrite(2, "hold record...");
   }
-
-  lcdWrite(1, unix.substring(5) + " x:" + String(gx));
-  lcdWrite(2, "y:" + String(gy) + " z:" + String(gz));
-  outputFile.close();
 }
