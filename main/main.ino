@@ -12,7 +12,7 @@ const unsigned int sampleRateHZ = 100;
 const int chipSelect = 10;
 const int nextButton = 8;
 const int recordButton = 9;
-const char *classList[] = {"hey", "ho", "lets", "go"};
+const char *classList[] = {"normal", "bad", "dirt", "speedbump", "suddenstop", "suddenaccl"};
 
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 30;    // the debounce time; increase if the output flickers
@@ -110,7 +110,7 @@ void loop () {
       String filename = String(now.year()).substring(2) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
       String unix = String(now.unixtime());
       String output;
-      int raw[3];
+      int raw[6];
 
       File outputFile = SD.open(filename, FILE_WRITE);
 
@@ -122,8 +122,8 @@ void loop () {
 
       while (digitalRead(recordButton) == HIGH) {
         if (CurieIMU.dataReady()) {
-          CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
-          output = unix + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(currentClass);
+          CurieIMU.readMotionSensor(raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]);
+          output = unix + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(raw[3]) + "," + String(raw[4]) + "," + String(raw[5]) + "," + String(currentClass);
 
           int wrote = outputFile.println(output);
 
@@ -135,6 +135,15 @@ void loop () {
           } 
         }
       }
+
+      int wrote = outputFile.println("--------");
+
+      if (!wrote) {
+        lcdWrite(1, "Error writing");
+        lcdWrite(2, "to file");
+        gotError = true;
+        return;
+      } 
 
       outputFile.close();
       lcdWrite(2, "done recording");
