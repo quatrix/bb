@@ -3,7 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import tensorflow as tf  # Version 1.0.0 (some previous versions are used in past commits)
 from sklearn import metrics
-from consts import axis, labels
+from consts import axis, GRAPH_LABELS
 
 import os
 import sys
@@ -129,7 +129,7 @@ n_input = len(X_train[0][0])  # 9 input parameters per timestep
 # LSTM Neural Network's internal structure
 
 n_hidden = 32 # Hidden layer num of features
-n_classes = 4 # Total classes (should go up, or should go down)
+n_classes = 5 # Total classes (should go up, or should go down)
 
 
 # Training 
@@ -137,9 +137,13 @@ n_classes = 4 # Total classes (should go up, or should go down)
 learning_rate = 0.0025
 lambda_loss_amount = 0.0015
 training_iters = training_data_count * 300  # Loop 300 times on the dataset
-batch_size = 1500
+batch_size = 3000
 display_iter = 30000  # To show test set accuracy during training
 
+print("Some useful info to get an insight on dataset's shape and normalisation:")
+print("(X shape, y shape, every X's mean, every X's standard deviation)")
+print(X_train.shape, y_train.shape, np.mean(X_train), np.std(X_train))
+print("The dataset is therefore properly normalised, as expected, but not yet one-hot encoded.")
 
 # Some debugging info
 
@@ -280,8 +284,8 @@ plt.imshow(
 plt.title("Confusion matrix \n(normalised to % of total test data)")
 plt.colorbar()
 tick_marks = np.arange(n_classes)
-plt.xticks(tick_marks, labels, rotation=90)
-plt.yticks(tick_marks, labels)
+plt.xticks(tick_marks, GRAPH_LABELS, rotation=90)
+plt.yticks(tick_marks, GRAPH_LABELS)
 plt.tight_layout()
 plt.ylabel('True label')
 plt.xlabel('Predicted label')
