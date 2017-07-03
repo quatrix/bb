@@ -43,10 +43,21 @@ def read_raw(input_file, chunk_size):
     return res
 
 
+def low_pass_filter(d, threshold):
+    for i in d:
+        if abs(i) > threshold:
+            yield i
+        else:
+            yield 0
+
+
 def merge(cls, acc, chunk_size):
+    chunk_size = math.floor(chunk_size / 4)
     acc = np.transpose(acc)
-    chunked = np.array([list(chunk(i, chunk_size)) for i in acc])
+    filtered = [list(low_pass_filter(undersample(i, 4), 100)) for i in acc]
+    chunked = np.array([list(chunk(i, chunk_size)) for i in filtered])
     chunked = np.array([np.array([np.pad(i, (0, chunk_size - len(i)), 'constant') for i in d]) for d in chunked])
+
     return np.transpose(chunked, (1, 0, 2))
     
 
@@ -54,6 +65,10 @@ def chunk(data, chunk_size):
     half_chunk = math.floor(chunk_size/2)
     prev_data = data[0:chunk_size]
 
+    if not len(prev_data):
+        return np.array([])
+
+    prev_data = np.array(prev_data)
     yield prev_data
 
     for i in range(chunk_size, len(data), half_chunk):
@@ -61,6 +76,14 @@ def chunk(data, chunk_size):
         yield chunk
         prev_data = chunk
     
+
+def undersample(data, size):
+    res = []
+
+    for i in range(0, len(data), size):  
+        res.append(np.average(data[i:i+size]))
+
+    return res
 
 @click.command()
 @click.option('-i', '--input-file', required=True, multiple=True)
