@@ -10,7 +10,7 @@ import random
 import numpy as np
 
 
-def read_raw(input_file, chunk_size):
+def read_raw(input_file, chunk_size, undersample_by, lowpass_threshold):
     res = []
 
     with open(input_file) as f:
@@ -25,7 +25,7 @@ def read_raw(input_file, chunk_size):
 
             if line == SEP:
                 if acc is not None and acc.size:
-                    for c in merge(cls, acc, chunk_size):
+                    for c in merge(cls, acc, chunk_size, undersample_by, lowpass_threshold):
                         res.append((cls, c))
                     acc = None
                 cls = None
@@ -51,10 +51,10 @@ def low_pass_filter(d, threshold):
             yield 0
 
 
-def merge(cls, acc, chunk_size):
-    chunk_size = math.floor(chunk_size / 4)
+def merge(cls, acc, chunk_size, undersample_by, lowpass_threshold):
+    chunk_size = math.floor(chunk_size / undersample_by)
     acc = np.transpose(acc)
-    filtered = [list(low_pass_filter(undersample(i, 4), 100)) for i in acc]
+    filtered = [list(low_pass_filter(undersample(i, undersample_by), lowpass_threshold)) for i in acc]
     chunked = np.array([list(chunk(i, chunk_size)) for i in filtered])
     chunked = np.array([np.array([np.pad(i, (0, chunk_size - len(i)), 'constant') for i in d]) for d in chunked])
 
@@ -88,9 +88,11 @@ def undersample(data, size):
 @click.command()
 @click.option('-i', '--input-file', required=True, multiple=True)
 @click.option('-o', '--output-dir', required=True)
-@click.option('-c', '--chunk_size', default=30)
-@click.option('-r', '--ratio', default=0.6)
-def main(input_file, output_dir, chunk_size, ratio):
+@click.option('-c', '--chunk-size', default=30)
+@click.option('-r', '--ratio', default=0.7)
+@click.option('-u', '--undersample-by', default=4)
+@click.option('-l', '--lowpass-threshold', default=100)
+def main(input_file, output_dir, chunk_size, ratio, undersample_by, lowpass_threshold):
     try:
         for t in 'train', 'test':
             for axi in axis:
@@ -102,14 +104,14 @@ def main(input_file, output_dir, chunk_size, ratio):
 
     data = []
     for i in input_file:
-        data += read_raw(i, chunk_size)
+        data += read_raw(i, chunk_size, undersample_by, lowpass_threshold)
 
     random.shuffle(data)
 
     for i in data:
         cls = i[0]
 
-        t = 'train' if random.random() < 0.7 else 'test'
+        t = 'train' if random.random() < ratio else 'test'
 
         for axi, ts in zip(axis, i[1]):
             open(os.path.join(output_dir, t, axi), 'a').write(','.join([str(j) for j in ts]) + '\n')

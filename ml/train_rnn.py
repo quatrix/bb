@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf  # Version 1.0.0 (some previous versions are used in past commits)
 from sklearn import metrics
 from consts import axis, GRAPH_LABELS
+from utils import load_X, load_Y, LSTM_RNN, one_hot
 
 import os
 import sys
@@ -12,70 +13,12 @@ import sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 input_dir = sys.argv[1]
+model_output = sys.argv[2]
 
-def load_X(X_signals_paths):
-    X_signals = []
-    
-    for signal_type_path in X_signals_paths:
-        file = open(signal_type_path, 'r')
-        # Read dataset from disk, dealing with text files' syntax
-        X_signals.append(
-            [np.array(serie, dtype=np.float32) for serie in [
-                row.split(',') for row in file
-            ]]
-        )
-        file.close()
-    
-    return np.transpose(np.array(X_signals), (1, 2, 0))
+if not input_dir or not model_output:
+    print('Usage: {} <input_dir> <model_output_file>'.format(sys.argv[0]))
+    sys.exit(-1)
 
-
-def load_y(y_path):
-    file = open(y_path, 'r')
-    # Read dataset from disk, dealing with text file's syntax
-    y_ = np.array(
-        [elem for elem in [
-            row.replace('  ', ' ').strip().split(' ') for row in file
-        ]], 
-        dtype=np.int32
-    )
-    file.close()
-    
-    # Substract 1 to each output class for friendly 0-based indexing 
-    return y_ - 1
-
-def LSTM_RNN(_X, _weights, _biases):
-    # Function returns a tensorflow LSTM (RNN) artificial neural network from given parameters. 
-    # Moreover, two LSTM cells are stacked which adds deepness to the neural network. 
-    # Note, some code of this notebook is inspired from an slightly different 
-    # RNN architecture used on another dataset, some of the credits goes to 
-    # "aymericdamien" under the MIT license.
-
-    # (NOTE: This step could be greatly optimised by shaping the dataset once
-    # input shape: (batch_size, n_steps, n_input)
-    _X = tf.transpose(_X, [1, 0, 2])  # permute n_steps and batch_size
-    # Reshape to prepare input to hidden activation
-    _X = tf.reshape(_X, [-1, n_input]) 
-    # new shape: (n_steps*batch_size, n_input)
-    
-    # Linear activation
-    _X = tf.nn.relu(tf.matmul(_X, _weights['hidden']) + _biases['hidden'])
-    # Split data because rnn cell needs a list of inputs for the RNN inner loop
-    _X = tf.split(_X, n_steps, 0) 
-    # new shape: n_steps * (batch_size, n_hidden)
-
-    # Define two stacked LSTM cells (two recurrent layers deep) with tensorflow
-    lstm_cell_1 = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-    lstm_cell_2 = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-    lstm_cells = tf.contrib.rnn.MultiRNNCell([lstm_cell_1, lstm_cell_2], state_is_tuple=True)
-    # Get LSTM cell output
-    outputs, states = tf.contrib.rnn.static_rnn(lstm_cells, _X, dtype=tf.float32)
-
-    # Get last time step's output feature for a "many to one" style classifier, 
-    # as in the image describing RNNs at the top of this page
-    lstm_last_output = outputs[-1]
-    
-    # Linear activation
-    return tf.matmul(lstm_last_output, _weights['out']) + _biases['out']
 
 
 def extract_batch_size(_train, step, batch_size):
@@ -93,13 +36,6 @@ def extract_batch_size(_train, step, batch_size):
     return batch_s
 
 
-def one_hot(y_):
-    # Function to encode output labels from number indexes 
-    # e.g.: [[5], [0], [3]] --> [[0, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
-    
-    y_ = y_.reshape(len(y_))
-    n_values = int(np.max(y_)) + 1
-    return np.eye(n_values)[np.array(y_, dtype=np.int32)]  # Returns FLOATS
 
 
 X_train_signals_paths = [
@@ -115,8 +51,8 @@ X_test = load_X(X_test_signals_paths)
 y_train_path = os.path.join(input_dir, 'train', 'classification')
 y_test_path = os.path.join(input_dir, 'test', 'classification')
 
-y_train = load_y(y_train_path)
-y_test = load_y(y_test_path)
+y_train = load_Y(y_train_path)
+y_test = load_Y(y_test_path)
 
 # Input Data 
 
@@ -153,8 +89,8 @@ print(X_test.shape, y_test.shape, np.mean(X_test), np.std(X_test))
 print("The dataset is therefore properly normalised, as expected, but not yet one-hot encoded.")
 
 # Graph input/output
-x = tf.placeholder(tf.float32, [None, n_steps, n_input])
-y = tf.placeholder(tf.float32, [None, n_classes])
+x = tf.placeholder(tf.float32, [None, n_steps, n_input], name='x')
+y = tf.placeholder(tf.float32, [None, n_classes], name='y')
 
 # Graph weights
 weights = {
@@ -166,7 +102,7 @@ biases = {
     'out': tf.Variable(tf.random_normal([n_classes]))
 }
 
-pred = LSTM_RNN(x, weights, biases)
+pred = LSTM_RNN(n_input, n_steps, n_hidden, x, weights, biases)
 
 # Loss, optimizer and evaluation
 l2 = lambda_loss_amount * sum(
@@ -174,6 +110,8 @@ l2 = lambda_loss_amount * sum(
 ) # L2 loss prevents this overkill neural network to overfit the data
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=pred)) + l2 # Softmax loss
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost) # Adam Optimizer
+saver = tf.train.Saver()
+
 
 correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
@@ -231,6 +169,8 @@ while step * batch_size <= training_iters:
     step += 1
 
 print("Optimization Finished!")
+save_path = saver.save(sess, model_output)
+print("Model saved in file: %s" % model_output)
 
 # Accuracy for test data
 
