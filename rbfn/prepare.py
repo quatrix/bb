@@ -60,7 +60,7 @@ def main(input_file, output_dir, chunk_size, n_samples):
     samples = defaultdict(dict)
 
     for i in input_file:
-        read_raw(all_samples, i, chunk_size)
+        read_raw(all_samples, i, chunk_size * 3)
 
     for cls, s in all_samples.items():
         random.shuffle(s)
@@ -68,13 +68,17 @@ def main(input_file, output_dir, chunk_size, n_samples):
         samples['train'][cls] = s[0:n_samples]
         samples['test'][cls] = s[n_samples:]
 
+        print(cls, len(samples['train'][cls]))
+
     for t, clss in samples.items():
         for cls, tss in clss.items():
             f = open(os.path.join(output_dir, '{}_{}.bin'.format(t, cls)), 'wb')
+            f_asc = open(os.path.join(output_dir, '{}_{}.txt'.format(t, cls)), 'w')
 
             for ts in tss:
                 packed = pack('%dh' % len(ts), *ts)
                 f.write(packed)
+                f_asc.write(','.join([str(i) for i in ts]) + '\n')
 
             
 if __name__ == '__main__':
