@@ -1,4 +1,5 @@
-ml/.pyenv
+rnn/.pyenv
+rbfn/.pyenv
 .DS_Store
 __pycache__
 .cache
