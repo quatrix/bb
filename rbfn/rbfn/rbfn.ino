@@ -13,13 +13,13 @@ RTClib RTC;
 const int chipSelect = 10;
 const char *classList[] = {"normal", "bad", "dirt", "speedbump", "suddenstop", "suddenaccl"};
 
-const int chunk_size = 200;
-const int steps = 3;
+const int chunk_size = 100;
+const int steps = 6;
 const int samples_per_ts = int(chunk_size / steps) * steps + steps;
 
 
 const unsigned int vectorNumBytes = 128;
-const unsigned int samplesPerVector = (vectorNumBytes / 3);
+const unsigned int samplesPerVector = (vectorNumBytes / steps);
 
 
 const unsigned int sensorBufSize = 2048;
@@ -58,30 +58,28 @@ void setup() {
 
     while (f.available()) {
         byte accel[sensorBufSize];
-        int16_t raw[3] = {0,0,0};
+        int16_t raw[steps];
         unsigned int samples = 0;
         unsigned int x = 0;
 
         ++n_samples;
 
         for (int k = 0; k < samples_per_ts; k++) { 
-          f.read(raw, sizeof(raw));
-
-          if (raw[0] == 0 && raw[1] == 0 && raw[2] == 0) {
+          if (f.read(raw, sizeof(raw)) != sizeof(raw)) {
             Serial.println("NO MORE DATA" + String(n_samples));
             break;
           }
 
-          accel[x] = (byte) map(raw[0], IMULow, IMUHigh, 0, 255);
-          accel[x + 1] = (byte) map(raw[1], IMULow, IMUHigh, 0, 255);
-          accel[x + 2] = (byte) map(raw[2], IMULow, IMUHigh, 0, 255);
+          for (int z = 0; z<steps; z++) {
+              accel[x+z] = (byte) map(raw[z], IMULow, IMUHigh, 0, 255);
+          }
 
-          x += 3;
+          x += steps;
           ++samples;
 
           /* If there's not enough room left in the buffers
           * for the next read, then we're done */
-          if (x + 3 > sensorBufSize) {
+          if (x + steps > sensorBufSize) {
               Serial.println("not enought room, breaking");
               break;
           }
@@ -89,8 +87,7 @@ void setup() {
 
       byte vector[vectorNumBytes];
       undersample(accel, samples, vector);
-      int learned = CuriePME.learn(vector, vectorNumBytes, i+100);
-
+      CuriePME.learn(vector, vectorNumBytes, i+100);
     }
 
     Serial.println("N_SAMPLES: " + String(n_samples));
@@ -111,7 +108,7 @@ void setup() {
 
     while (f.available()) {
         byte accel[sensorBufSize];
-        int16_t raw[3] = {0,0,0};
+        int16_t raw[steps];
         unsigned int samples = 0;
         unsigned int x = 0;
 
@@ -123,16 +120,16 @@ void setup() {
             break;
           }
 
-          accel[x] = (byte) map(raw[0], IMULow, IMUHigh, 0, 255);
-          accel[x + 1] = (byte) map(raw[1], IMULow, IMUHigh, 0, 255);
-          accel[x + 2] = (byte) map(raw[2], IMULow, IMUHigh, 0, 255);
+          for (int z = 0; z<steps; z++) {
+              accel[x+z] = (byte) map(raw[z], IMULow, IMUHigh, 0, 255);
+          }
 
-          x += 3;
+          x += steps;
           ++samples;
 
           /* If there's not enough room left in the buffers
           * for the next read, then we're done */
-          if (x + 3 > sensorBufSize) {
+          if (x + steps > sensorBufSize) {
               Serial.println("not enought room, breaking");
               break;
           }

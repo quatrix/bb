@@ -11,8 +11,10 @@ import random
 import numpy as np
 
 
+
 def read_raw(res, input_file, chunk_size):
     step = 3
+    chunk_size *= step
     chunk_size = math.floor(chunk_size / step) * step + step
 
     with open(input_file) as f:
@@ -33,9 +35,9 @@ def read_raw(res, input_file, chunk_size):
                     acc = []
                 cls = None
             else:
-                raw = [int(i) for i in line.split(',')[4:]]
+                raw = [int(i) for i in line.split(',')]
                 cls = raw[-1]
-                acc += raw[0:-1]
+                acc += raw[4:-1]
 
 
 def chunk(data, step, chunk_size):
@@ -60,7 +62,7 @@ def main(input_file, output_dir, chunk_size, n_samples):
     samples = defaultdict(dict)
 
     for i in input_file:
-        read_raw(all_samples, i, chunk_size * 3)
+        read_raw(all_samples, i, chunk_size)
 
     for cls, s in all_samples.items():
         random.shuffle(s)

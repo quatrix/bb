@@ -3,7 +3,7 @@ from struct import unpack
 
 @click.command()
 @click.option('-i', '--input-file', required=True)
-@click.option('-c', '--chunk-size', required=True)
+@click.option('-c', '--chunk-size', type=int, required=True)
 def main(input_file, chunk_size):
     res = []
 
@@ -24,7 +24,8 @@ def main(input_file, chunk_size):
                 acc = []
 
     for i in res:
-        print(len(i))
+        if len(i):
+            print(len(i))
 
             
 if __name__ == '__main__':
