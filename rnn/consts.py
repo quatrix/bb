@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-axis = ['ax', 'ay', 'az', 'gx', 'gy', 'gz']
+axis = ['gx', 'gy', 'gz']
 
 GRAPH_LABELS = [
     "NORMAL_ROAD",

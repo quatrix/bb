@@ -34,7 +34,7 @@ def read_raw(input_file, chunk_size, undersample_by, lowpass_threshold):
                 cls = int(splitted[-1]) + 1
                 #m = interp1d([IMU_MIN, IMU_MAX],[0,1])
                 #imu = np.array([m(float(i)) for i in splitted[1:-1]], dtype=float)
-                imu = np.array([float(i) for i in splitted[1:-1]], dtype=float)
+                imu = np.array([float(i) for i in splitted[4:-1]], dtype=float)
                 if acc is not None:
                     acc = np.vstack((acc, imu))
                 else:
