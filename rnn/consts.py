@@ -6,9 +6,6 @@ GRAPH_LABELS = [
     "NORMAL_ROAD",
     "BAD_ROAD",
     "DIRT_ROAD",
-    "SPEEDBUMP",
-    "SUDDEN_STOP",
-    "SUDDEN_ACCL",
 ]
 
 IMU_MIN = -32768

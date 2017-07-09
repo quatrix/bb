@@ -18,17 +18,25 @@ pip install -r requirements.txt
 
 ### preparing data
 ```bash
-cd ml
+cd rnn
 . ./pyenv/bin/activate
 mkdir -p processed/{test/train}
-python prepare.py -i ../raw_data/17_7_25.CSV -o processed
+python prepare.py -i ../raw_data/new_format/17_6_30.CSV -i ../raw_data/new_format/17_7_1.CSV -i ../raw_data/new_format/17_7_2.CSV -i ../raw_data/new_format/17_7_3.CSV -o processed -c 200 -u 2 -l 100 -r 0.6
+
 ```
 
-### building a testing a model
+### training a model
 ```bash
-cd ml
+cd rnn
 . ./pyenv/bin/activate
-python main.py processed
+python train_rnn.py processed model_666.ckpf
+```
+
+### classifying a csv
+```
+cd rnn
+. ./pyenv/bin/activate
+python classify_em.py -i ../raw_data/new_format/17_7_3.CSV -c 200 -u 2 -l 100  -m model_666.ckpf
 ```
 
 ### running tests

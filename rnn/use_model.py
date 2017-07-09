@@ -17,8 +17,6 @@ def main(model, test_dir):
     y_test_path = os.path.join(test_dir, 'classification')
     y_test = load_Y(y_test_path)
     
-    n_classes = 5 # Total classes (should go up, or should go down)
-
     with tf.Session() as sess:
         saver = tf.train.import_meta_graph(model + '.meta')
         saver.restore(sess,tf.train.latest_checkpoint('./'))

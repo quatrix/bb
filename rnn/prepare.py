@@ -16,6 +16,7 @@ def read_raw(input_file, chunk_size, undersample_by, lowpass_threshold):
     with open(input_file) as f:
         acc = None
         cls = None
+        ts = None
 
         while True:
             line = f.readline().strip()
@@ -26,15 +27,23 @@ def read_raw(input_file, chunk_size, undersample_by, lowpass_threshold):
             if line == SEP:
                 if acc is not None and acc.size:
                     for c in merge(cls, acc, chunk_size, undersample_by, lowpass_threshold):
-                        res.append((cls, c))
+                        res.append((ts, cls, c))
                     acc = None
+
                 cls = None
+                ts = None
             else:
                 splitted = line.split(',')
-                cls = int(splitted[-1]) + 1
-                #m = interp1d([IMU_MIN, IMU_MAX],[0,1])
-                #imu = np.array([m(float(i)) for i in splitted[1:-1]], dtype=float)
+
+                if cls is None:
+                    ts = int(splitted[0])
+                    cls = int(splitted[-1]) + 1
+                
+                if cls > 3:
+                    continue
+
                 imu = np.array([float(i) for i in splitted[4:-1]], dtype=float)
+
                 if acc is not None:
                     acc = np.vstack((acc, imu))
                 else:
@@ -109,11 +118,11 @@ def main(input_file, output_dir, chunk_size, ratio, undersample_by, lowpass_thre
     random.shuffle(data)
 
     for i in data:
-        cls = i[0]
+        cls = i[1]
 
         t = 'train' if random.random() < ratio else 'test'
 
-        for axi, ts in zip(axis, i[1]):
+        for axi, ts in zip(axis, i[2]):
             open(os.path.join(output_dir, t, axi), 'a').write(','.join([str(j) for j in ts]) + '\n')
          
         open(os.path.join(output_dir, t, 'classification'), 'a').write(str(cls) + '\n')
