@@ -7,6 +7,8 @@ Use Arduino 101's 6-axis accelerometer/gyro + machine learning to figure out roa
 * SD Card reader/writer
 * RealTimeClock
 * LCD display
+* EM506 GPS Receiver Module
+* Arduino Uno (used as GPS proxy)
 
 ### installation
 ```bash

@@ -1,3 +1,5 @@
+#include <SpacebrewYun.h>
+
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 
@@ -25,13 +27,15 @@ void setup()
 
 void loop()
 {
-  while (ss.available() > 0)
+  while (ss.available() > 0){
     if (gps.encode(ss.read())){
         data2Send = getData2Send(); 
 //        char buff[data2Send.length()];
 //        data2Send.toCharArray(buff, data2Send.length());
         Serial.println(data2Send);
+//        delay(30);
     }
+  }
 
   if (millis() > 5000 && gps.charsProcessed() < 10)
   {
@@ -43,16 +47,31 @@ void loop()
 String getData2Send()
 {
   String res ="";
+  String spd = "0";
+  String dtime = "000000:00000000";
+  String ddate = "";
   if (gps.location.isValid())
   {
+    if (gps.time.isValid()){
+      ddate = String(gps.date.value());
+      if (ddate.length() < 6)
+      {
+        ddate = "0" + ddate;
+      }
+      
+      dtime = ddate + ":" + String(gps.time.value());
+    }
+    res += dtime;
+    res += ",";
     res += String(gps.location.lat(),6);
     res += ":";
     res += String(gps.location.lng(),6);
-  }  
-  if (gps.speed.isValid())
-  {
     res += ",";
-    res += String(gps.speed.kmph());
-  }
+    if (gps.speed.isValid())
+    {
+      spd = String(gps.speed.kmph());
+    }
+    res += spd;
+  }  
   return res;
 }
