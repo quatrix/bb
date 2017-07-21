@@ -10,44 +10,43 @@ import random
 import numpy as np
 
 
-def read_raw(input_file, chunk_size, undersample_by, lowpass_threshold):
+def read_raw(lines, chunk_size, undersample_by, lowpass_threshold):
     res = []
 
-    with open(input_file) as f:
-        acc = None
-        cls = None
-        ts = None
+    acc = None
+    cls = None
+    ts = None
 
-        while True:
-            line = f.readline().strip()
+    for line in lines:
+        line = line.strip()
 
-            if not line:
-                break
+        if not line:
+            break
 
-            if line == SEP:
-                if acc is not None and acc.size:
-                    for c in merge(cls, acc, chunk_size, undersample_by, lowpass_threshold):
-                        res.append((ts, cls, c))
-                    acc = None
+        if line == SEP:
+            if acc is not None and acc.size:
+                for c in merge(cls, acc, chunk_size, undersample_by, lowpass_threshold):
+                    res.append((ts, cls, c))
+                acc = None
 
-                cls = None
-                ts = None
+            cls = None
+            ts = None
+        else:
+            splitted = line.split(',')
+
+            if cls is None:
+                ts = int(splitted[0])
+                cls = int(splitted[-1]) + 1
+            
+            if cls > 3:
+                continue
+
+            imu = np.array([float(i) for i in splitted[4:-1]], dtype=float)
+
+            if acc is not None:
+                acc = np.vstack((acc, imu))
             else:
-                splitted = line.split(',')
-
-                if cls is None:
-                    ts = int(splitted[0])
-                    cls = int(splitted[-1]) + 1
-                
-                if cls > 3:
-                    continue
-
-                imu = np.array([float(i) for i in splitted[4:-1]], dtype=float)
-
-                if acc is not None:
-                    acc = np.vstack((acc, imu))
-                else:
-                    acc = imu
+                acc = imu
 
     return res
 
@@ -111,21 +110,24 @@ def main(input_file, output_dir, chunk_size, ratio, undersample_by, lowpass_thre
     except FileNotFoundError:
         pass
 
-    data = []
+    data = {
+        'train': [],
+        'test': [],
+    }
+
     for i in input_file:
-        data += read_raw(i, chunk_size, undersample_by, lowpass_threshold)
+        a = open(i).readlines()
+        data['train'] += read_raw(a[0:math.floor(len(a) * ratio)], chunk_size, undersample_by, lowpass_threshold)
+        data['test'] += read_raw(a[math.floor(len(a) * ratio):], chunk_size, undersample_by, lowpass_threshold)
 
-    random.shuffle(data)
+    for t, data in data.items():
+        for i in data:
+            cls = i[1]
 
-    for i in data:
-        cls = i[1]
-
-        t = 'train' if random.random() < ratio else 'test'
-
-        for axi, ts in zip(axis, i[2]):
-            open(os.path.join(output_dir, t, axi), 'a').write(','.join([str(j) for j in ts]) + '\n')
-         
-        open(os.path.join(output_dir, t, 'classification'), 'a').write(str(cls) + '\n')
+            for axi, ts in zip(axis, i[2]):
+                open(os.path.join(output_dir, t, axi), 'a').write(','.join([str(j) for j in ts]) + '\n')
+             
+            open(os.path.join(output_dir, t, 'classification'), 'a').write(str(cls) + '\n')
             
 if __name__ == '__main__':
     main()
