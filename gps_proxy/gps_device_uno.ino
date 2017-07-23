@@ -1,5 +1,3 @@
-#include <SpacebrewYun.h>
-
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 

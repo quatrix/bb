@@ -1,12 +1,23 @@
+#include <stddef.h>
+#include <Arduino.h>
+
 #include "CurieIMU.h"
 #include "CuriePME.h"
+#include <CurieBLE.h>
+#include <CurieTime.h>
+
 #include <SoftwareSerial.h>
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
 #include "DS3231.h"
-#include <CurieTime.h>
+
 #include <LiquidCrystal_I2C.h>
+
+BLEService statusService("cb73af71-04cf-4938-99df-756fb8f7cbb9");
+BLECharacteristic stateChar("8573d3e8-c84f-4efe-8cbf-0dd72b7ac1f7", BLERead | BLEWrite, 5);
+
+uint8_t state[] = {0x00, 0x00, 0x00, 0x00, 0x00};
 
 //lcd init
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -24,10 +35,10 @@ const char* mlModelFilename = "model.dat";
     Any higher than 4, and you may not have enough neurons for all 26 letters
     of the alphabet. Lower than 4 means less work for you to train a letter,
     but the PME may have a harder time classifying that letter. */
-const unsigned int trainingReps = 6;
+const unsigned int trainingReps = 8;
 
 const unsigned int trainingStart = 1;
-const unsigned int trainingEnd = 3;
+const unsigned int trainingEnd = 7;
 
 // button used for training
 const unsigned int buttonPin = 8;
@@ -47,18 +58,37 @@ const int IMULow = -32768;
 const int IMUHigh = 32767;
 const unsigned int MANUAL_CUTOFF = 130;
 
-
 const char *classList[] = {"WIDE BUMPER","SHARP ACCL","HARD BRAKING","ROAD BUMP","SHARP RIGHT","SHARP LEFT","NORMAL"};
+
+const String filename = "pme_dat.csv";
+const String rawDataFilename = "raw_dat.csv";
+const String naiveDataFilename = "naiv_dat.csv";
+
+const char BLE_NAME[] = "BB";
+boolean isBLEInit = false;
+
+volatile int xShox;
+volatile int yShox;
+volatile int zShox;
+
+File outputFile;
+File rawOutputFile;
+File naiveOutputFile;
 
 void setup()
 {
+
+  xShox = 0;
+  yShox = 0;
+  zShox = 0;
+  
   lcd.init();                      // initialize the lcd
   lcd.backlight();
 
   lcdWrite(1, "Initializing...");
   gpsserial.begin(9600);
   delay(300);
-  lcdWrite(1, "Init GPS...");
+  lcdWrite(2, "Init GPS...");
   delay(300);
   Wire.begin();
   pinMode(53, OUTPUT);
@@ -98,64 +128,70 @@ void setup()
   CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
   CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
   CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
-  lcdWrite(2, "Done.");
 
   CurieIMU.setAccelerometerRate(sampleRateHZ);
+  CurieIMU.setGyroRate(sampleRateHZ);
   CurieIMU.setAccelerometerRange(2);
 
-  lcdWrite(1, "Init done");
-  lcdWrite(2, "                  ");
-  //  trainRoadBehaviour();
-  //   saveMLModel();
+  lcdWrite(2, "Done.");
 
   //check if already have a saved trained network
   if (!SD.exists(mlModelFilename)) {
-    trainRoadBehaviour();
+    trainRoadBehaviour("");
     if (isDebug) {
       Serial.println("Training complete!");
     }
     //save the model
     saveMLModel();
   } else {
-    lcdWrite(1, "Model exists");
+    lcdWrite(2, "Model exists");
     //load
     restoreMLMode();
   }
+
+  outputFile = SD.open(filename, FILE_WRITE);
+  rawOutputFile = SD.open(rawDataFilename, FILE_WRITE);
+  naiveOutputFile = SD.open(naiveDataFilename, FILE_WRITE);
+
+//  CurieIMU.attachInterrupt(shockDetectedCallback);
+
+  /* Enable Shock Detection */
+//  CurieIMU.setDetectionThreshold(CURIE_IMU_SHOCK, 1500); // 1.5g = 1500 mg
+//  CurieIMU.setDetectionDuration(CURIE_IMU_SHOCK, 50);   // 50ms
+
+//  CurieIMU.interrupts(CURIE_IMU_SHOCK);
+
+  lcdWrite(1, "Init done");
+  lcdWrite(2, "                  ");
+  delay(300);
+  lcd.noBacklight();
 }
 
+//BLE only when button is pressed!
 void loop ()
 {
-  delay(10);
+  while(digitalRead(buttonPin) == HIGH)
+  {
+    handleBLEMode();
+  }
+
+  if(digitalRead(buttonPin) == LOW && isBLEInit){
+    BLE.end();
+    isBLEInit=false;
+  }
+
   DateTime now = RTC.now();
   //  String filename = String(now.year()) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
-  String filename = "data_bb2.csv";
   String unix = String(now.unixtime());
-  File outputFile = SD.open(filename, FILE_WRITE);
-
-  if (!outputFile) {
-    lcdWrite(1, "Error opening file [" + filename + "]");
+//  File outputFile = SD.open(filename, FILE_WRITE);
+//  File rawOutputFile = SD.open(rawDataFilename, FILE_WRITE);
+//  File naiveOutputFile = SD.open(naiveDataFilename, FILE_WRITE);
+  
+  if (!outputFile || !rawOutputFile || !naiveOutputFile) {
+    lcdWrite(1, "Error opening file!");
     return;
   }
 
-  byte vector[vectorNumBytes];
-  unsigned int category;
-  String text;
-
-  /* Record IMU data while button is being held, and
-     convert it to a suitable vector */
-  readVectorFromIMU(vector, false);
-
-  /* Use the PME to classify the vector,  */
-  category = CuriePME.classify(vector, vectorNumBytes);
-  text = getTextById(category);
-  if (category == CuriePME.noMatch) {
-    if (isDebug) {
-      Serial.println("Don't recognise that one-- try again.");
-    }
-    lcdWrite(1, String(category));
-  } else {
-    lcdWrite(1, text);
-  }
   if (gpsserial.available()) {
     gpsString = gpsserial.readStringUntil('\n');
     gpsString = gpsserial.readStringUntil('\n');
@@ -164,10 +200,42 @@ void loop ()
     //    lcdWrite(2,kk.substring(kk.indexOf(':')+1, kk.indexOf(',')));
   }
 
-  if (category >= 1 && category <= 8) {
+  byte vector[vectorNumBytes];
+  unsigned int category;
+  String text;
+
+  /* Record IMU data while button is being held, and
+     convert it to a suitable vector */
+  readVectorFromIMU(vector, false, unix, gpsString, rawOutputFile);
+
+//  CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
+
+
+  /* Use the PME to classify the vector,  */
+  category = CuriePME.classify(vector, vectorNumBytes);
+  text = getTextById(category);
+  if (category == CuriePME.noMatch) {
+    lcd.noBacklight();
+    if (isDebug) {
+      Serial.println("Don't recognise that one-- try again.");
+    }
+    lcdWrite(1, String(category));
+  } else {
+    lcdWrite(1, text);
+    if(category != 7){
+        lcd.backlight();
+        delay(300);
+    }
+    if(category == 7)
+        lcd.noBacklight();
+  }
+
+  if (category >= 1 && category <= 7) {
     String output;
     output = unix + "," + text + "," + gpsString;
-    int wrote = outputFile.println(output);
+    
+    //gpsString already has \n
+    int wrote = outputFile.print(output);
 
     if (!wrote) {
       lcdWrite(1, "Error writing");
@@ -176,7 +244,21 @@ void loop ()
     }
   }
 
-  outputFile.close();
+//  outputFile.close();
+//  rawOutputFile.close();
+  outputFile.flush();
+  rawOutputFile.flush();
+
+  if (xShox+yShox+zShox>0){
+      naiveOutputFile.print(String(xShox)+","+String(yShox)+","+String(zShox)+","+gpsString);
+      xShox = 0;
+      yShox = 0;
+      zShox = 0;
+  }
+//  naiveOutputFile.close();
+  naiveOutputFile.flush();
+//  CurieIMU.interrupts(CURIE_IMU_SHOCK);
+
 }
 
 /*
@@ -265,6 +347,7 @@ void restoreMLMode(void)
       if (isDebug)
         Serial.println(lline);
       //      lcdWrite(1,json);
+
       String metaData = lline.substring(0, lline.indexOf('|'));
       String vvector = lline.substring(lline.indexOf('|') + 1);
 
@@ -314,6 +397,60 @@ String getTextById(unsigned int id) {
    return "UNKNOWN";
 }
 
+void handleBLEMode(){
+
+  if (!isBLEInit){
+    lcd.backlight();
+    lcdWrite(1, F("Init BLE")); 
+    BLE.begin();
+    BLE.setLocalName(BLE_NAME);
+    BLE.setAdvertisedService(statusService);
+    statusService.addCharacteristic(stateChar);
+    BLE.addService(statusService);
+    BLE.advertise();
+    lcdWrite(1, F("Init BLE Done"));
+    delay(800);
+    isBLEInit=true;
+    lcd.noBacklight();
+  }
+  BLEDevice central = BLE.central();
+
+  if (central) {
+    
+    if (isDebug){
+        Serial.print("Connected to central: ");
+        Serial.println(central.address());
+    }
+    if (central.connected()) {
+     if (stateChar.written()) {
+        const byte request = stateChar.value()[0];
+        if (request == 1) {
+          lcd.backlight();
+          lcdWrite(1, "Got GET_STATE request!");
+          delay(300);
+//          lcd.noBacklight();
+          state[0] = 13;
+          state[1] = 3;
+          state[2] = 20;
+          state[3] = 71;
+          state[4] = 101;
+          stateChar.setValue(state, 5);
+        } else if (request == 2) {
+          lcdWrite(1, F("Got RESET request!"));
+        } else {
+          lcdWrite(1, F("Got unknown request: "));
+          lcdWrite(2, String(request));
+        }
+
+      }
+      delay(500);
+      lcd.noBacklight();
+
+    }
+  }
+  
+  delay(100);  
+}
 /* Simple "moving average" filter, removes low noise and other small
    anomalies, with the effect of smoothing out the data stream. */
 byte getAverageSample(byte samples[], unsigned int num, unsigned int pos,
@@ -383,10 +520,10 @@ void lcdWrite (int line, String msg) {
 }
 
 
-void readVectorFromIMU(byte vector[], boolean isTraining)
+void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, String gpsString, File rawOutputFile)
 {
   byte accel[sensorBufSize];
-  int raw[3];
+  int raw[6];
 
   unsigned int samples = 0;
   unsigned int i = 0;
@@ -398,10 +535,8 @@ void readVectorFromIMU(byte vector[], boolean isTraining)
 
   /* While button is being held... */
   while ((!isTraining) || (isTraining && (digitalRead(buttonPin) == HIGH))) {
-    if (CurieIMU.dataReady()) {
-
-      CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
-
+ 
+      readAndDumpMotion(raw, unixtime, gpsString, rawOutputFile, isTraining);
       /* Map raw values to 0-255 */
       accel[i] = (byte) map(raw[0], IMULow, IMUHigh, 0, 255);
       accel[i + 1] = (byte) map(raw[1], IMULow, IMUHigh, 0, 255);
@@ -418,7 +553,7 @@ void readVectorFromIMU(byte vector[], boolean isTraining)
       if (i + 3 > sensorBufSize) {
         break;
       }
-    }
+    
   }
   if (isDebug) {
     lcdWrite(1, String(samples));
@@ -428,8 +563,34 @@ void readVectorFromIMU(byte vector[], boolean isTraining)
   undersample(accel, samples, vector);
 }
 
-void trainRoad(unsigned int category, unsigned int repeat)
+int readAndDumpMotion(int raw[], String unixtime, String gpsString, File rawOutputFile, boolean isTraining){
+    if (CurieIMU.dataReady()) {
+
+      CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
+      CurieIMU.readGyro(raw[3], raw[4], raw[5]);
+      if (isTraining)
+          return 0;
+      String output = unixtime + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(raw[3]) + "," + String(raw[4]) + "," + String(raw[5]) + "," + gpsString;
+      //gpsString already includes \n
+      
+//      CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
+      int wrote = rawOutputFile.print(output);
+//      CurieIMU.interrupts(CURIE_IMU_SHOCK);
+
+
+      if (!wrote) {
+        lcdWrite(1, "Error writing");
+        lcdWrite(2, "to file");
+        return 0;
+      }
+      return wrote;
+    }  
+    return -1;
+}
+
+void trainRoad(unsigned int category, unsigned int repeat, String unixtime)
 {
+  File dummyF;
   unsigned int i = 0;
 
   while (i < repeat) {
@@ -441,7 +602,7 @@ void trainRoad(unsigned int category, unsigned int repeat)
       lcdWrite(1, "And again...");
     }
 
-    readVectorFromIMU(vector, true);
+    readVectorFromIMU(vector, true, unixtime, "", dummyF);
     CuriePME.learn(vector, vectorNumBytes, category);
 
     if (isDebug) {
@@ -453,17 +614,17 @@ void trainRoad(unsigned int category, unsigned int repeat)
   }
 }
 
-void trainRoadBehaviour()
+void trainRoadBehaviour(String unixtime)
 {
   for (int i = trainingStart; i <= trainingEnd; ++i) {
     if (isDebug) {
-      Serial.print("Hold down the button while driving '");
+      Serial.print("Hold down the button to train driving pattern '");
       Serial.print(String(i) + "' release when over ");
     }
     lcdWrite(1, "training");
     lcdWrite(2, getTextById(i));
 
-    trainRoad(i, trainingReps);
+    trainRoad(i, trainingReps, unixtime);
     if (isDebug) {
       Serial.println("OK, finished with this pattern.");
     }
@@ -474,3 +635,14 @@ void trainRoadBehaviour()
   }
 }
 
+static void shockDetectedCallback(void)
+{
+  if (CurieIMU.getInterruptStatus(CURIE_IMU_SHOCK)) {
+    if (CurieIMU.shockDetected(X_AXIS, POSITIVE) || CurieIMU.shockDetected(X_AXIS, NEGATIVE))
+      xShox++;
+    if (CurieIMU.shockDetected(Y_AXIS, POSITIVE) || CurieIMU.shockDetected(Y_AXIS, NEGATIVE))
+      yShox++;
+    if (CurieIMU.shockDetected(Z_AXIS, POSITIVE) || CurieIMU.shockDetected(Z_AXIS, NEGATIVE))
+      zShox++;
+  }
+}
