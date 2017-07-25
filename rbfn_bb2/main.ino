@@ -31,12 +31,11 @@ String gpsString;
 boolean isDebug = false; //if connected to my comp - serial will be enabled and considered debug mode
 const int chipSelect = 10;
 const char* mlModelFilename = "model.dat";
-/*  This controls how many times a letter must be drawn during training.
-    Any higher than 4, and you may not have enough neurons for all 26 letters
-    of the alphabet. Lower than 4 means less work for you to train a letter,
-    but the PME may have a harder time classifying that letter. */
-const unsigned int trainingReps = 8;
 
+//repetitions for training
+const unsigned int trainingReps = 5;
+
+//categories
 const unsigned int trainingStart = 1;
 const unsigned int trainingEnd = 7;
 
@@ -56,9 +55,10 @@ const unsigned int samplesPerVector = (vectorNumBytes / 3);
 const unsigned int sensorBufSize = 2048;
 const int IMULow = -32768;
 const int IMUHigh = 32767;
-const unsigned int MANUAL_CUTOFF = 130;
+const unsigned int MANUAL_CUTOFF = 168;
 
-const char *classList[] = {"WIDE BUMPER","SHARP ACCL","HARD BRAKING","ROAD BUMP","SHARP RIGHT","SHARP LEFT","NORMAL"};
+//const char *classList[] = {"WIDE BUMPER","SHARP ACCL","HARD BRAKING","ROAD BUMP","SHARP RIGHT","SHARP LEFT","NORMAL"};
+const char *classList[] = {"WIDE BUMPER", "HARD BRAKING", "SHARP RIGHT", "SHARP LEFT"};
 
 const String filename = "pme_dat.csv";
 const String rawDataFilename = "raw_dat.csv";
@@ -78,10 +78,11 @@ File naiveOutputFile;
 void setup()
 {
 
+  tone(6, 784, 200);
   xShox = 0;
   yShox = 0;
   zShox = 0;
-  
+
   lcd.init();                      // initialize the lcd
   lcd.backlight();
 
@@ -97,18 +98,18 @@ void setup()
   delay(100);
 
   if (!SD.begin(chipSelect)) {
-    Serial.println("SD Card failed");
-    lcdWrite(2, "SD Card failed");
+    Serial.println(F("SD Card failed"));
+    lcdWrite(2, F("SD Card failed"));
     return;
   }
-  lcdWrite(2, "SD Card found");
+  lcdWrite(2, F("SD Card found"));
   delay(100);
 
   Serial.begin(230400);
   isDebug = Serial;
 
   if (isDebug) {
-    lcdWrite(2, "Debug mode!");
+    lcdWrite(2, F("Debug mode!"));
   }
 
   pinMode(buttonPin, INPUT);
@@ -120,31 +121,31 @@ void setup()
   /* Start the PME (Pattern Matching Engine) */
   CuriePME.begin();
   delay(1000);
-  lcdWrite(2, "Calibrating Gyro...");
+  lcdWrite(2, F("Calibrating Gyro..."));
   CurieIMU.autoCalibrateGyroOffset();
-  lcdWrite(2, "Done.");
+  lcdWrite(2, F("Done."));
 
-  lcdWrite(2, "Calibrating Accel...");
+  lcdWrite(2, F("Calibrating Accel..."));
   CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
   CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
   CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
 
   CurieIMU.setAccelerometerRate(sampleRateHZ);
   CurieIMU.setGyroRate(sampleRateHZ);
-  CurieIMU.setAccelerometerRange(2);
+  CurieIMU.setAccelerometerRange(4);
 
-  lcdWrite(2, "Done.");
+  lcdWrite(2, F("Done."));
 
   //check if already have a saved trained network
   if (!SD.exists(mlModelFilename)) {
     trainRoadBehaviour("");
     if (isDebug) {
-      Serial.println("Training complete!");
+      Serial.println(F("Training complete!"));
     }
     //save the model
     saveMLModel();
   } else {
-    lcdWrite(2, "Model exists");
+    lcdWrite(2, F("Model exists"));
     //load
     restoreMLMode();
   }
@@ -153,16 +154,16 @@ void setup()
   rawOutputFile = SD.open(rawDataFilename, FILE_WRITE);
   naiveOutputFile = SD.open(naiveDataFilename, FILE_WRITE);
 
-//  CurieIMU.attachInterrupt(shockDetectedCallback);
+  //  CurieIMU.attachInterrupt(shockDetectedCallback);
 
   /* Enable Shock Detection */
-//  CurieIMU.setDetectionThreshold(CURIE_IMU_SHOCK, 1500); // 1.5g = 1500 mg
-//  CurieIMU.setDetectionDuration(CURIE_IMU_SHOCK, 50);   // 50ms
+  //  CurieIMU.setDetectionThreshold(CURIE_IMU_SHOCK, 1500); // 1.5g = 1500 mg
+  //  CurieIMU.setDetectionDuration(CURIE_IMU_SHOCK, 50);   // 50ms
 
-//  CurieIMU.interrupts(CURIE_IMU_SHOCK);
+  //  CurieIMU.interrupts(CURIE_IMU_SHOCK);
 
-  lcdWrite(1, "Init done");
-  lcdWrite(2, "                  ");
+  lcdWrite(1, F("Init done"));
+  lcdWrite(2, F("                  "));
   delay(300);
   lcd.noBacklight();
 }
@@ -170,23 +171,25 @@ void setup()
 //BLE only when button is pressed!
 void loop ()
 {
-  while(digitalRead(buttonPin) == HIGH)
+  gpsString = "\n";
+  //if button pressed inside main loop - activate BLE, stream data.
+  while (digitalRead(buttonPin) == HIGH)
   {
     handleBLEMode();
   }
 
-  if(digitalRead(buttonPin) == LOW && isBLEInit){
+  if (digitalRead(buttonPin) == LOW && isBLEInit) {
     BLE.end();
-    isBLEInit=false;
+    isBLEInit = false;
   }
 
   DateTime now = RTC.now();
   //  String filename = String(now.year()) + "_" + String(now.month()) + "_" + String(now.day()) + ".csv";
   String unix = String(now.unixtime());
-//  File outputFile = SD.open(filename, FILE_WRITE);
-//  File rawOutputFile = SD.open(rawDataFilename, FILE_WRITE);
-//  File naiveOutputFile = SD.open(naiveDataFilename, FILE_WRITE);
-  
+  //  File outputFile = SD.open(filename, FILE_WRITE);
+  //  File rawOutputFile = SD.open(rawDataFilename, FILE_WRITE);
+  //  File naiveOutputFile = SD.open(naiveDataFilename, FILE_WRITE);
+
   if (!outputFile || !rawOutputFile || !naiveOutputFile) {
     lcdWrite(1, "Error opening file!");
     return;
@@ -208,7 +211,7 @@ void loop ()
      convert it to a suitable vector */
   readVectorFromIMU(vector, false, unix, gpsString, rawOutputFile);
 
-//  CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
+  //  CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
 
 
   /* Use the PME to classify the vector,  */
@@ -217,59 +220,60 @@ void loop ()
   if (category == CuriePME.noMatch) {
     lcd.noBacklight();
     if (isDebug) {
-      Serial.println("Don't recognise that one-- try again.");
+      Serial.println(F("WAT?? try again."));
     }
     lcdWrite(1, String(category));
   } else {
     lcdWrite(1, text);
-    if(category != 7){
-        lcd.backlight();
-        delay(300);
+    if (category != 7) {
+      tone(6, 784, 200);
+      lcd.backlight();
+      delay(500);
     }
-    if(category == 7)
-        lcd.noBacklight();
+    if (category == 7)
+      lcd.noBacklight();
   }
 
   if (category >= 1 && category <= 7) {
     String output;
     output = unix + "," + text + "," + gpsString;
-    
+
     //gpsString already has \n
     int wrote = outputFile.print(output);
 
     if (!wrote) {
-      lcdWrite(1, "Error writing");
-      lcdWrite(2, "to file");
+      lcdWrite(1, F("Error writing"));
+      lcdWrite(2, F("to file"));
       return;
     }
   }
 
-//  outputFile.close();
-//  rawOutputFile.close();
+  //  outputFile.close();
+  //  rawOutputFile.close();
   outputFile.flush();
   rawOutputFile.flush();
 
-  if (xShox+yShox+zShox>0){
-      naiveOutputFile.print(String(xShox)+","+String(yShox)+","+String(zShox)+","+gpsString);
-      xShox = 0;
-      yShox = 0;
-      zShox = 0;
+  if (xShox + yShox + zShox > 0) {
+    naiveOutputFile.print(String(xShox) + "," + String(yShox) + "," + String(zShox) + "," + gpsString);
+    xShox = 0;
+    yShox = 0;
+    zShox = 0;
   }
-//  naiveOutputFile.close();
+  //  naiveOutputFile.close();
   naiveOutputFile.flush();
-//  CurieIMU.interrupts(CURIE_IMU_SHOCK);
+  //  CurieIMU.interrupts(CURIE_IMU_SHOCK);
 
 }
 
 /*
- * Save as TEXT (csv)
- * file format:
- * ------------------------------------------------------
- * |CONTEXT|INFLUENCE|MIN_INFLUENCE|CATEGORY|VECTOR[128]|
- * ------------------------------------------------------
- */
+   Save as TEXT (csv)
+   file format:
+   ------------------------------------------------------
+   |CONTEXT|INFLUENCE|MIN_INFLUENCE|CATEGORY|VECTOR[128]|
+   ------------------------------------------------------
+*/
 void saveMLModel() {
-  lcdWrite(1, "About to save the model");
+  lcdWrite(1, F("About to save the model"));
   delay(100);
   Intel_PMT::neuronData neuronData;
   File outputFile = SD.open(mlModelFilename, FILE_WRITE);
@@ -301,7 +305,7 @@ void saveMLModel() {
 
       for (int i = 0; i < vectorNumBytes; i++) {
         outputFile.print(neuronData.vector[i]);
-        if (i != (vectorNumBytes -1))
+        if (i != (vectorNumBytes - 1))
           outputFile.print(',');
         //        lcdWrite(2, String(neuronData.vector[i]) + " -- " + String(i));
         //        delay(200);
@@ -329,9 +333,9 @@ void restoreMLMode(void)
   CuriePME.beginRestoreMode();
   if (file) {
     if (isDebug) {
-      lcdWrite(1, "About to restore");
+      lcdWrite(1, F("About to restore"));
       delay(1000);
-      Serial.println("About to restore Data");
+      Serial.println(F("About to restore Data"));
     }
     // iterate over the network and save the data.
     while (file.available()) {
@@ -386,22 +390,22 @@ void restoreMLMode(void)
 
   CuriePME.endRestoreMode();
   file.close();
-  lcdWrite(1, "Saved Model Loaded");
+  lcdWrite(1, F("Saved Model Loaded"));
   delay(1000);
 }
 
 
 String getTextById(unsigned int id) {
-  if (id>0 && id<= trainingEnd)
-      return classList[(id-1)];
-   return "UNKNOWN";
+  if (id > 0 && id <= trainingEnd)
+    return classList[(id - 1)];
+  return "UNKNOWN";
 }
 
-void handleBLEMode(){
+void handleBLEMode() {
 
-  if (!isBLEInit){
+  if (!isBLEInit) {
     lcd.backlight();
-    lcdWrite(1, F("Init BLE")); 
+    lcdWrite(1, F("Init BLE"));
     BLE.begin();
     BLE.setLocalName(BLE_NAME);
     BLE.setAdvertisedService(statusService);
@@ -410,25 +414,25 @@ void handleBLEMode(){
     BLE.advertise();
     lcdWrite(1, F("Init BLE Done"));
     delay(800);
-    isBLEInit=true;
+    isBLEInit = true;
     lcd.noBacklight();
   }
   BLEDevice central = BLE.central();
 
   if (central) {
-    
-    if (isDebug){
-        Serial.print("Connected to central: ");
-        Serial.println(central.address());
+
+    if (isDebug) {
+      Serial.print("Connected to central: ");
+      Serial.println(central.address());
     }
     if (central.connected()) {
-     if (stateChar.written()) {
+      if (stateChar.written()) {
         const byte request = stateChar.value()[0];
         if (request == 1) {
           lcd.backlight();
           lcdWrite(1, "Got GET_STATE request!");
           delay(300);
-//          lcd.noBacklight();
+          //          lcd.noBacklight();
           state[0] = 13;
           state[1] = 3;
           state[2] = 20;
@@ -448,8 +452,8 @@ void handleBLEMode(){
 
     }
   }
-  
-  delay(100);  
+
+  delay(100);
 }
 /* Simple "moving average" filter, removes low noise and other small
    anomalies, with the effect of smoothing out the data stream. */
@@ -523,7 +527,10 @@ void lcdWrite (int line, String msg) {
 void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, String gpsString, File rawOutputFile)
 {
   byte accel[sensorBufSize];
+
+  int prevRaw[3];
   int raw[6];
+  boolean isFirst = true;
 
   unsigned int samples = 0;
   unsigned int i = 0;
@@ -535,25 +542,33 @@ void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, Strin
 
   /* While button is being held... */
   while ((!isTraining) || (isTraining && (digitalRead(buttonPin) == HIGH))) {
- 
-      readAndDumpMotion(raw, unixtime, gpsString, rawOutputFile, isTraining);
-      /* Map raw values to 0-255 */
-      accel[i] = (byte) map(raw[0], IMULow, IMUHigh, 0, 255);
-      accel[i + 1] = (byte) map(raw[1], IMULow, IMUHigh, 0, 255);
-      accel[i + 2] = (byte) map(raw[2], IMULow, IMUHigh, 0, 255);
 
-      i += 3;
-      ++samples;
+    readAndDumpMotion(raw, unixtime, gpsString, rawOutputFile, isTraining);
+    /* Map raw values to 0-255 */
 
-      /* during manual observations - the sample magic number was discovered
-        break here */
-      if (samples > MANUAL_CUTOFF) {
-        break;
-      }
-      if (i + 3 > sensorBufSize) {
-        break;
-      }
-    
+    if (isFirst) {
+      for (int j = 0; j < 3; j++)
+        prevRaw[j] = raw[j];
+      isFirst = false;
+    }
+    accel[i] = (byte) map((raw[0] - prevRaw[0]), IMULow, IMUHigh, 0, 255);
+    accel[i + 1] = (byte) map((raw[1] - prevRaw[1]), IMULow, IMUHigh, 0, 255);
+    accel[i + 2] = (byte) map((raw[2] - prevRaw[2]), IMULow, IMUHigh, 0, 255);
+
+    i += 3;
+    ++samples;
+
+    for (int j = 0; j < 3; j++)
+      prevRaw[j] = raw[j];
+    /* during manual observations - the sample magic number was discovered
+      break here */
+    if (samples > MANUAL_CUTOFF) {
+      break;
+    }
+    if (i + 3 > sensorBufSize) {
+      break;
+    }
+
   }
   if (isDebug) {
     lcdWrite(1, String(samples));
@@ -563,29 +578,29 @@ void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, Strin
   undersample(accel, samples, vector);
 }
 
-int readAndDumpMotion(int raw[], String unixtime, String gpsString, File rawOutputFile, boolean isTraining){
-    if (CurieIMU.dataReady()) {
+int readAndDumpMotion(int raw[], String unixtime, String gpsString, File rawOutputFile, boolean isTraining) {
+  if (CurieIMU.dataReady()) {
 
-      CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
-      CurieIMU.readGyro(raw[3], raw[4], raw[5]);
-      if (isTraining)
-          return 0;
-      String output = unixtime + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(raw[3]) + "," + String(raw[4]) + "," + String(raw[5]) + "," + gpsString;
-      //gpsString already includes \n
-      
-//      CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
-      int wrote = rawOutputFile.print(output);
-//      CurieIMU.interrupts(CURIE_IMU_SHOCK);
+    CurieIMU.readAccelerometer(raw[0], raw[1], raw[2]);
+    CurieIMU.readGyro(raw[3], raw[4], raw[5]);
+    if (isTraining)
+      return 0;
+    String output = unixtime + "," + String(raw[0]) + "," + String(raw[1]) + "," + String(raw[2]) + "," + String(raw[3]) + "," + String(raw[4]) + "," + String(raw[5]) + "," + gpsString;
+    //gpsString already includes \n
+
+    //      CurieIMU.noInterrupts(CURIE_IMU_SHOCK);
+    int wrote = rawOutputFile.print(output);
+    //      CurieIMU.interrupts(CURIE_IMU_SHOCK);
 
 
-      if (!wrote) {
-        lcdWrite(1, "Error writing");
-        lcdWrite(2, "to file");
-        return 0;
-      }
-      return wrote;
-    }  
-    return -1;
+    if (!wrote) {
+      lcdWrite(1, F("Error writing"));
+      lcdWrite(2, F("to file"));
+      return 0;
+    }
+    return wrote;
+  }
+  return -1;
 }
 
 void trainRoad(unsigned int category, unsigned int repeat, String unixtime)
@@ -598,15 +613,15 @@ void trainRoad(unsigned int category, unsigned int repeat, String unixtime)
 
     if (i) {
       if (isDebug)
-        Serial.println("And again...");
-      lcdWrite(1, "And again...");
+        Serial.println(F("And again..."));
+      lcdWrite(1, "[" + String(i) + F("] And again..."));
     }
 
     readVectorFromIMU(vector, true, unixtime, "", dummyF);
     CuriePME.learn(vector, vectorNumBytes, category);
 
     if (isDebug) {
-      Serial.println("Got it!");
+      Serial.println(F("OK!"));
     }
     lcdWrite(1, "Done !");
     delay(1000);
@@ -618,15 +633,15 @@ void trainRoadBehaviour(String unixtime)
 {
   for (int i = trainingStart; i <= trainingEnd; ++i) {
     if (isDebug) {
-      Serial.print("Hold down the button to train driving pattern '");
-      Serial.print(String(i) + "' release when over ");
+      Serial.print(F("Hold down the button to train driving pattern"));
+      Serial.print(String(i) + F("release when over "));
     }
     lcdWrite(1, "training");
     lcdWrite(2, getTextById(i));
 
     trainRoad(i, trainingReps, unixtime);
     if (isDebug) {
-      Serial.println("OK, finished with this pattern.");
+      Serial.println(F("OK, finished with this pattern."));
     }
     lcdWrite(1, "Finished training");
     lcdWrite(2, String(i));
