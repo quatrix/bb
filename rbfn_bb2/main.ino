@@ -33,7 +33,7 @@ const int chipSelect = 10;
 const char* mlModelFilename = "model.dat";
 
 //repetitions for training
-const unsigned int trainingReps = 5;
+const unsigned int trainingReps = 7;
 
 //categories
 const unsigned int trainingStart = 1;
@@ -57,8 +57,8 @@ const int IMULow = -32768;
 const int IMUHigh = 32767;
 const unsigned int MANUAL_CUTOFF = 168;
 
-//const char *classList[] = {"WIDE BUMPER","SHARP ACCL","HARD BRAKING","ROAD BUMP","SHARP RIGHT","SHARP LEFT","NORMAL"};
-const char *classList[] = {"WIDE BUMPER", "HARD BRAKING", "SHARP RIGHT", "SHARP LEFT"};
+const char *classList[] = {"WIDE BUMPER","SHARP ACCL","HARD BRAKING","ROAD BUMP","SHARP RIGHT","SHARP LEFT","NORMAL"};
+//const char *classList[] = {"HARD BRAKING", "SHARP RIGHT", "SHARP LEFT","NORMAL"};
 
 const String filename = "pme_dat.csv";
 const String rawDataFilename = "raw_dat.csv";
@@ -132,7 +132,7 @@ void setup()
 
   CurieIMU.setAccelerometerRate(sampleRateHZ);
   CurieIMU.setGyroRate(sampleRateHZ);
-  CurieIMU.setAccelerometerRange(4);
+  CurieIMU.setAccelerometerRange(2);
 
   lcdWrite(2, F("Done."));
 
@@ -178,6 +178,7 @@ void loop ()
     handleBLEMode();
   }
 
+//deactivate BLE when no need
   if (digitalRead(buttonPin) == LOW && isBLEInit) {
     BLE.end();
     isBLEInit = false;
@@ -225,7 +226,7 @@ void loop ()
     lcdWrite(1, String(category));
   } else {
     lcdWrite(1, text);
-    if (category != 7) {
+    if (category != 4) {
       tone(6, 784, 200);
       lcd.backlight();
       delay(500);
@@ -433,9 +434,9 @@ void handleBLEMode() {
           lcdWrite(1, "Got GET_STATE request!");
           delay(300);
           //          lcd.noBacklight();
-          state[0] = 13;
-          state[1] = 3;
-          state[2] = 20;
+          state[0] = xShox;
+          state[1] = yShox;
+          state[2] = zShox;
           state[3] = 71;
           state[4] = 101;
           stateChar.setValue(state, 5);
@@ -551,9 +552,9 @@ void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, Strin
         prevRaw[j] = raw[j];
       isFirst = false;
     }
-    accel[i] = (byte) map((raw[0] - prevRaw[0]), IMULow, IMUHigh, 0, 255);
-    accel[i + 1] = (byte) map((raw[1] - prevRaw[1]), IMULow, IMUHigh, 0, 255);
-    accel[i + 2] = (byte) map((raw[2] - prevRaw[2]), IMULow, IMUHigh, 0, 255);
+    accel[i] = (byte) map(zerroEffect((raw[0] - prevRaw[0]),200), IMULow, IMUHigh, 0, 255);
+    accel[i + 1] = (byte) map(zerroEffect((raw[1] - prevRaw[1]),200), IMULow, IMUHigh, 0, 255);
+    accel[i + 2] = (byte) map(zerroEffect((raw[2] - prevRaw[2]),200), IMULow, IMUHigh, 0, 255);
 
     i += 3;
     ++samples;
@@ -576,6 +577,13 @@ void readVectorFromIMU(byte vector[], boolean isTraining, String unixtime, Strin
   }
 
   undersample(accel, samples, vector);
+}
+
+//remove all readings below threshold
+int zerroEffect(int num, const int threshold){
+  if (abs(num)<threshold)
+      return 0;
+  return num;
 }
 
 int readAndDumpMotion(int raw[], String unixtime, String gpsString, File rawOutputFile, boolean isTraining) {
@@ -631,7 +639,7 @@ void trainRoad(unsigned int category, unsigned int repeat, String unixtime)
 
 void trainRoadBehaviour(String unixtime)
 {
-  for (int i = trainingStart; i <= trainingEnd; ++i) {
+  for (int i = trainingStart; i <= trainingEnd; i++) {
     if (isDebug) {
       Serial.print(F("Hold down the button to train driving pattern"));
       Serial.print(String(i) + F("release when over "));
