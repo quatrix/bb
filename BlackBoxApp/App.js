@@ -28,6 +28,14 @@ const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
 const serviceId = 'cb73af71-04cf-4938-99df-756fb8f7cbb9'
 const charId = '8573d3e8-c84f-4efe-8cbf-0dd72b7ac1f7'
 
+const weights =  {
+  speed_bumps: 0.5,
+  fast_accls: 1.5,
+  fast_stops: 1.5,
+  sharp_turns: 1.5,
+  shocks: 0.1,
+}
+
 
 export default class App extends Component {
   constructor(){
@@ -35,7 +43,6 @@ export default class App extends Component {
 
     this.state = {
       connecting: false,
-      deviceId: undefined,
     }
 
     this.handleDiscoverPeripheral = this.handleDiscoverPeripheral.bind(this);
@@ -144,12 +151,12 @@ export default class App extends Component {
         BleManager.read(this.state.deviceId, serviceId, charId)
         .then((data) => {
           this.setState({
-            'bb_state': {
-              'speed_bumps': data[0],
-              'fast_accls': data[1],
-              'fast_stops': data[2],
-              'sharp_turns': data[3],
-              'shocks': data[4],
+            bb_state: {
+              speed_bumps: data[0],
+              fast_accls: data[1],
+              fast_stops: data[2],
+              sharp_turns: data[3],
+              shocks: data[4],
             }
           })
         })
@@ -204,27 +211,50 @@ class BBState extends Component {
   render() {
     const s = this.props.bb_state
 
+    const score = _calcScore(weights, s)
+    const w = weights
+
     return (
       <View style={styles.bb_state}>
-        <Box title="Speed Bumps" number={s.speed_bumps} />
-        <Box title="Fast Accls" number={s.fast_accls} />
-        <Box title="Fast Stops" number={s.fast_stops} />
-        <Box title="Sharp Turns" number={s.sharp_turns} />
-        <Box title="Shocks" number={s.shocks} />
+        <Box title="Speed Bumps" number={s.speed_bumps} score={s.speed_bumps * w.speed_bumps}/>
+        <Box title="Fast Accls" number={s.fast_accls} score={s.fast_accls * w.fast_accls}/>
+        <Box title="Fast Stops" number={s.fast_stops} score={s.fast_stops * w.fast_stops}/>
+        <Box title="Sharp Turns" number={s.sharp_turns} score={s.sharp_turns * w.sharp_turns}/>
+        <Box title="Shocks" number={s.shocks} score={s.shocks * w.shocks}/>
+        <Box title="Score" number={score} score={score} textStyle={{color: 'white', fontWeight: 'bold'}} />
       </View>
     )
   }
 }
 
+function _calcScore(weights, state) {
+  return Object.keys(state).reduce((acc, k) => {
+    acc += weights[k] * state[k]
+    return acc
+  }, 0)
+}
+
+
 class Box extends Component {
   render() {
     const title = this.props.title
     const number = this.props.number
+    const score = this.props.score
+    const red = '#e91e63'
+    const yellow = '#ffeb3b'
+    const green = '#8bc34a'
+
+    if (score > 100)
+      color = red
+    else if (score > 30)
+      color = yellow
+    else
+      color = green
 
     return (
-      <View style={styles.box}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.number}>{number}</Text>
+      <View style={[styles.box, {backgroundColor: color}]}>
+        <Text style={[this.props.textStyle, styles.title]}>{title}</Text>
+        <Text style={[this.props.textStyle, styles.number]}>{number}</Text>
       </View>
     )
   }
@@ -247,8 +277,8 @@ const styles = StyleSheet.create({
   },
   
   box: {
-    backgroundColor: 'yellow',
-    width: 200,
+    borderWidth: 0.5,
+    width: window.width/ 2,
     height: 180,
     alignItems: 'center',
     justifyContent: 'center',
