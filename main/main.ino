@@ -8,7 +8,7 @@
 LiquidCrystal_I2C lcd(0x27,20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 RTClib RTC;
 
-const unsigned int sampleRateHZ = 100;
+const unsigned int sampleRateHZ = 500;
 const int chipSelect = 10;
 const int nextButton = 8;
 const int recordButton = 9;

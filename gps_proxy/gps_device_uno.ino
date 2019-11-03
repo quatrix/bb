@@ -28,14 +28,11 @@ void loop()
   while (ss.available() > 0){
     if (gps.encode(ss.read())){
         data2Send = getData2Send(); 
-//        char buff[data2Send.length()];
-//        data2Send.toCharArray(buff, data2Send.length());
         Serial.println(data2Send);
-//        delay(30);
     }
   }
 
-  if (millis() > 5000 && gps.charsProcessed() < 10)
+  if (millis() > 15000 && gps.charsProcessed() < 10)
   {
     Serial.println(F("No GPS detected: check wiring."));
     while(true);
